@@ -1,2 +1,2 @@
-# Data365---Finance-Manager
+# Data365 - Finance-Manager
 Managing business's income and expense
