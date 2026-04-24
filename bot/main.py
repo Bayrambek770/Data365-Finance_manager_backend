@@ -1,6 +1,9 @@
 import logging
 import os
 from dotenv import load_dotenv
+
+load_dotenv()
+
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -14,8 +17,6 @@ from bot.handlers.start import handle_start, handle_contact, handle_cancel
 from bot.handlers.voice import handle_voice
 from bot.handlers.text import handle_text
 from bot.handlers.callbacks import handle_callback
-
-load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO,

@@ -7,6 +7,16 @@ from bot.utils import api_client
 logger = logging.getLogger(__name__)
 
 
+def main_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("➕ Add Category"), KeyboardButton("📋 My Transactions")],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=False,
+    )
+
+
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     telegram_id = user.id
@@ -20,7 +30,8 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             username=user.username or "",
             language="en",
         )
-        is_registered = not result.get("is_new_user", True)
+        is_new_user = result.get("is_new_user", False)
+        is_registered = result.get("is_registered", False)
 
         # Store user info in context
         context.user_data["telegram_id"] = telegram_id
@@ -30,13 +41,15 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if is_registered:
             dashboard_url = result.get("dashboard_url", "")
             await update.message.reply_text(
-                f"👋 Welcome back!\n\n"
-                f"Your dashboard: {dashboard_url}\n\n"
+                "👋 Welcome back!\n\n"
                 "You can log transactions by sending me a message or voice note.\n\n"
                 "Examples:\n"
                 "• 'Received 500,000 UZS from client'\n"
                 "• 'Spent 200,000 on logistics'\n"
-                "• 'How much did we earn this week?'"
+                f"• 'How much did we earn this week?'\n\n"
+                f'📊 <a href="{dashboard_url}">Open your dashboard</a>',
+                parse_mode="HTML",
+                reply_markup=main_keyboard(),
             )
         else:
             # New user: ask language first
@@ -100,42 +113,49 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             username=tg_user.username or "",
             language=language,
         )
-
-        dashboard_url = result.get("dashboard_url", "")
-        context.user_data["unique_code"] = result.get("unique_code")
-        context.user_data["dashboard_url"] = dashboard_url
-
-        success_messages = {
-            "en": (
-                f"✅ Registration complete!\n"
-                f"Your personal dashboard: {dashboard_url}\n\n"
-                "You can now log transactions by sending me a message or voice note.\n\n"
-                "Examples:\n"
-                "• 'Received 500,000 UZS from client'\n"
-                "• 'Spent 200,000 on logistics'\n"
-                "• 'How much did we earn this week?'"
-            ),
-            "ru": (
-                f"✅ Регистрация завершена!\n"
-                f"Ваш личный дашборд: {dashboard_url}\n\n"
-                "Теперь вы можете добавлять транзакции, отправляя сообщения или голосовые заметки."
-            ),
-            "uz": (
-                f"✅ Ro'yxatdan o'tish yakunlandi!\n"
-                f"Shaxsiy dashboard: {dashboard_url}\n\n"
-                "Endi xabar yoki ovozli eslatma yuborish orqali tranzaksiyalarni qo'shishingiz mumkin."
-            ),
-        }
-
-        msg = success_messages.get(language, success_messages["en"])
-        await update.message.reply_text(msg, reply_markup=ReplyKeyboardRemove())
-
     except Exception as exc:
-        logger.error("Error in handle_contact: %s", exc)
+        logger.error("Error in handle_contact (register_user): %s", exc)
         await update.message.reply_text(
             "Sorry, registration failed. Please try /start again.",
             reply_markup=ReplyKeyboardRemove(),
         )
+        return
+
+    dashboard_url = result.get("dashboard_url", "")
+    context.user_data["unique_code"] = result.get("unique_code")
+    context.user_data["dashboard_url"] = dashboard_url
+
+    success_messages = {
+        "en": (
+            "✅ Registration complete!\n\n"
+            "You can now log transactions by sending me a message or voice note.\n\n"
+            "Examples:\n"
+            "• 'Received 500,000 UZS from client'\n"
+            "• 'Spent 200,000 on logistics'\n"
+            "• 'How much did we earn this week?'"
+        ),
+        "ru": (
+            "✅ Регистрация завершена!\n\n"
+            "Теперь вы можете добавлять транзакции, отправляя сообщения или голосовые заметки."
+        ),
+        "uz": (
+            "✅ Ro'yxatdan o'tish yakunlandi!\n\n"
+            "Endi xabar yoki ovozli eslatma yuborish orqali tranzaksiyalarni qo'shishingiz mumkin."
+        ),
+    }
+
+    unique_code = result.get("unique_code", "")
+
+    msg = success_messages.get(language, success_messages["en"])
+    await update.message.reply_text(
+        msg + f"\n\n🔑 Your secure code: <code>{unique_code}</code>",
+        reply_markup=main_keyboard(),
+        parse_mode="HTML",
+    )
+    await update.message.reply_text(
+        f'📊 <a href="{dashboard_url}">Open your dashboard</a>',
+        parse_mode="HTML",
+    )
 
 
 async def handle_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

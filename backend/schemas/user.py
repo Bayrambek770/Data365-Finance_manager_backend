@@ -25,3 +25,4 @@ class BotRegisterResponse(BaseModel):
     unique_code: str
     dashboard_url: str
     is_new_user: bool
+    is_registered: bool

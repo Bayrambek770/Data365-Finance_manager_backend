@@ -44,12 +44,12 @@ def bot_register(
             username=data.username,
             language=data.language,
             unique_code=unique_code,
-            is_registered=bool(data.phone_number),
+            is_registered=not data.phone_number.startswith("tg_"),
         )
         db.add(user)
     else:
         # Update mutable fields
-        if data.phone_number:
+        if data.phone_number and not data.phone_number.startswith("tg_"):
             user.phone_number = data.phone_number
             user.is_registered = True
         if data.full_name:
@@ -67,6 +67,7 @@ def bot_register(
         "unique_code": user.unique_code,
         "dashboard_url": dashboard_url,
         "is_new_user": is_new_user,
+        "is_registered": user.is_registered,
     }
 
 
@@ -111,6 +112,62 @@ def bot_get_categories(
             "is_default": c.is_default,
         }
         for c in categories
+    ]
+
+
+@router.post("/categories")
+def bot_create_category(
+    body: dict,
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_internal_key),
+):
+    name = (body.get("name") or "").strip()
+    cat_type = (body.get("type") or "").strip().lower()
+    if not name:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Category name is required")
+    if cat_type not in ("income", "expense"):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Type must be income or expense")
+    existing = db.query(Category).filter(Category.name.ilike(name)).first()
+    if existing:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=409, detail="Category already exists")
+    cat = Category(name=name, type=cat_type, is_default=False)
+    db.add(cat)
+    db.commit()
+    db.refresh(cat)
+    return {"id": str(cat.id), "name": cat.name, "type": cat.type.value}
+
+
+@router.get("/transactions")
+def bot_list_transactions(
+    telegram_id: int = Query(...),
+    limit: int = Query(10),
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_internal_key),
+):
+    user = db.query(User).filter(User.telegram_id == telegram_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    txs = (
+        db.query(Transaction)
+        .filter(Transaction.user_id == user.id)
+        .order_by(Transaction.date.desc(), Transaction.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "id": str(tx.id),
+            "date": tx.date.isoformat(),
+            "category_name": tx.category.name if tx.category else "",
+            "type": tx.type.value,
+            "amount": float(tx.amount),
+            "currency": tx.currency,
+            "note": tx.note or "",
+        }
+        for tx in txs
     ]
 
 
@@ -236,7 +293,7 @@ Tables (PostgreSQL):
 - budgets: id UUID, category_id UUID, amount_limit NUMERIC, currency TEXT
 """
         sql_response = client.chat.completions.create(
-            model="llama3-70b-8192",
+            model="llama-3.3-70b-versatile",
             messages=[
                 {
                     "role": "system",
@@ -265,7 +322,7 @@ Tables (PostgreSQL):
         rows = [dict(zip(result.keys(), row)) for row in result.fetchall()]
 
         answer_response = client.chat.completions.create(
-            model="llama3-70b-8192",
+            model="llama-3.3-70b-versatile",
             messages=[
                 {
                     "role": "system",

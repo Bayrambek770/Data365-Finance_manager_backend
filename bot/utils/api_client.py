@@ -99,6 +99,28 @@ async def update_transaction(telegram_id: int, transaction_id: str, fields: dict
         return resp.json()
 
 
+async def create_category(telegram_id: int, name: str, cat_type: str) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            f"{BACKEND_URL}/api/v1/bot/categories",
+            json={"name": name, "type": cat_type, "telegram_id": telegram_id},
+            headers=HEADERS,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def list_transactions(telegram_id: int, limit: int = 10) -> list:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            f"{BACKEND_URL}/api/v1/bot/transactions",
+            params={"telegram_id": telegram_id, "limit": limit},
+            headers=HEADERS,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def query_natural_language(telegram_id: int, question: str) -> dict:
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(

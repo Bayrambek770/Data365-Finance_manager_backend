@@ -50,7 +50,7 @@ Rules:
 - Never return null for intent"""
 
         response = self.client.chat.completions.create(
-            model="llama3-70b-8192",
+            model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text},
@@ -72,7 +72,7 @@ Rules:
 
     def answer_query(self, question: str, db_result: dict) -> str:
         response = self.client.chat.completions.create(
-            model="llama3-70b-8192",
+            model="llama-3.3-70b-versatile",
             messages=[
                 {
                     "role": "system",
@@ -99,7 +99,7 @@ Rules:
         lang_names = {"ru": "Russian", "uz": "Uzbek"}
         lang_name = lang_names.get(language, "English")
         response = self.client.chat.completions.create(
-            model="llama3-70b-8192",
+            model="llama-3.3-70b-versatile",
             messages=[
                 {
                     "role": "system",

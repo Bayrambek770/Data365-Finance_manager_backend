@@ -26,7 +26,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # Language selection
     if data.startswith("lang_"):
-        await _handle_language(query, context, data)
+        await _handle_language(update, context, data)
 
     elif data == "confirm_transaction":
         await _confirm_transaction(query, context)
@@ -41,6 +41,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         field = data.replace("edit_field_", "")
         await _ask_edit_field(query, context, field)
 
+    elif data.startswith("newcat_"):
+        await _handle_newcat_type(query, context, data)
+
     elif data == "delete_confirm":
         await _delete_transaction(query, context)
 
@@ -51,7 +54,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 # ── Language ─────────────────────────────────────────────────────────────────
 
-async def _handle_language(query, context: ContextTypes.DEFAULT_TYPE, data: str) -> None:
+async def _handle_language(update: Update, context: ContextTypes.DEFAULT_TYPE, data: str) -> None:
+    query = update.callback_query
     lang_map = {"lang_en": "en", "lang_ru": "ru", "lang_uz": "uz"}
     language = lang_map.get(data, "en")
     context.user_data["language"] = language
@@ -60,7 +64,7 @@ async def _handle_language(query, context: ContextTypes.DEFAULT_TYPE, data: str)
     await query.edit_message_text(
         f"✅ Language set to {lang_labels[language]}!"
     )
-    await send_phone_request(query, language)
+    await send_phone_request(update, language)
 
 
 # ── Confirm Transaction ───────────────────────────────────────────────────────
@@ -144,6 +148,16 @@ async def _ask_edit_field(query, context: ContextTypes.DEFAULT_TYPE, field: str)
     context.user_data["editing_field"] = field
     prompt = FIELD_PROMPTS.get(field, f"Enter new {field}:")
     await query.edit_message_text(prompt)
+
+
+# ── New Category ─────────────────────────────────────────────────────────────
+
+async def _handle_newcat_type(query, context: ContextTypes.DEFAULT_TYPE, data: str) -> None:
+    cat_type = data.replace("newcat_", "")   # "income" or "expense"
+    context.user_data["new_category_type"] = cat_type
+    context.user_data["state"] = "adding_category"
+    emoji = "💰" if cat_type == "income" else "💸"
+    await query.edit_message_text(f"{emoji} Enter the category name:")
 
 
 # ── Delete ────────────────────────────────────────────────────────────────────

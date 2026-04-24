@@ -1,6 +1,6 @@
 from pydantic import BaseModel, field_validator
 from typing import Optional, List
-from datetime import date, datetime
+import datetime as dt
 import uuid
 
 
@@ -9,7 +9,7 @@ class TransactionCreate(BaseModel):
     currency: str = "UZS"
     type: str
     category_id: uuid.UUID
-    date: Optional[date] = None
+    date: Optional[dt.date] = None
     note: Optional[str] = None
     source: str = "dashboard"
 
@@ -27,13 +27,21 @@ class TransactionCreate(BaseModel):
             raise ValueError("Type must be income or expense")
         return v
 
+    @field_validator("date")
+    @classmethod
+    def validate_date(cls, v: Optional[dt.date]) -> Optional[dt.date]:
+        if v and v > dt.date.today():
+            raise ValueError("Transaction date cannot be in the future")
+        return v
+
+
 
 class TransactionUpdate(BaseModel):
     amount: Optional[float] = None
     currency: Optional[str] = None
     type: Optional[str] = None
     category_id: Optional[uuid.UUID] = None
-    date: Optional[date] = None
+    date: Optional[dt.date] = None
     note: Optional[str] = None
 
     @field_validator("currency")
@@ -50,6 +58,13 @@ class TransactionUpdate(BaseModel):
             raise ValueError("Type must be income or expense")
         return v
 
+    @field_validator("date")
+    @classmethod
+    def validate_date(cls, v: Optional[dt.date]) -> Optional[dt.date]:
+        if v and v > dt.date.today():
+            raise ValueError("Transaction date cannot be in the future")
+        return v
+
 
 class BudgetWarning(BaseModel):
     category: str
@@ -62,7 +77,7 @@ class BudgetWarning(BaseModel):
 
 class TransactionItem(BaseModel):
     id: uuid.UUID
-    date: date
+    date: dt.date
     category_id: uuid.UUID
     category_name: str
     category_type: str
@@ -73,14 +88,14 @@ class TransactionItem(BaseModel):
     source: str
     added_by_phone: str
     is_mine: bool
-    created_at: datetime
+    created_at: dt.datetime
 
     model_config = {"from_attributes": True}
 
 
 class TransactionResponse(BaseModel):
     id: uuid.UUID
-    date: date
+    date: dt.date
     category_id: uuid.UUID
     category_name: str
     note: Optional[str] = None
@@ -107,7 +122,7 @@ class BotTransactionCreate(BaseModel):
     currency: str = "UZS"
     type: str
     category_id: uuid.UUID
-    date: Optional[date] = None
+    date: Optional[dt.date] = None
     note: Optional[str] = None
 
     @field_validator("currency")
@@ -122,4 +137,11 @@ class BotTransactionCreate(BaseModel):
     def validate_type(cls, v: str) -> str:
         if v not in ("income", "expense"):
             raise ValueError("Type must be income or expense")
+        return v
+
+    @field_validator("date")
+    @classmethod
+    def validate_date(cls, v: Optional[dt.date]) -> Optional[dt.date]:
+        if v and v > dt.date.today():
+            raise ValueError("Transaction date cannot be in the future")
         return v

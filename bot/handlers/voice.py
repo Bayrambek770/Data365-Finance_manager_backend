@@ -32,8 +32,6 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             f"📝 I heard: '{transcription}'\nAnalyzing..."
         )
 
-        # Route to text handler with transcribed text
-        update.message.text = transcription
         await handle_text(update, context, transcribed_text=transcription)
 
     except Exception as exc:

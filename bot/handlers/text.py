@@ -12,6 +12,8 @@ from bot.utils.formatter import (
     help_text,
     fmt_amount,
 )
+from bot.handlers.categories import handle_add_category, handle_category_name
+from bot.handlers.transactions_list import handle_transactions_list
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +35,33 @@ async def handle_text(
     text = transcribed_text or update.message.text or ""
     telegram_id = update.effective_user.id
 
+    # ── Persistent menu buttons ──────────────────────────────────────────────
+    if text == "➕ Add Category":
+        await handle_add_category(update, context)
+        return
+    if text == "📋 My Transactions":
+        await handle_transactions_list(update, context)
+        return
+
     # ── Handle pending state: user is answering a missing-field prompt ──────
     state = context.user_data.get("state")
 
     if state == "asking_field":
         await _handle_field_reply(update, context, text, telegram_id)
+        return
+
+    if state == "adding_category":
+        await handle_category_name(update, context)
+        return
+
+    if state == "editing_field":
+        await _handle_edit_field_reply(update, context, text, telegram_id)
+        return
+
+    if state == "confirming":
+        await update.message.reply_text(
+            "Please use the buttons above to Confirm, Cancel, or Edit the transaction."
+        )
         return
 
     # ── Fresh intent parsing ─────────────────────────────────────────────────
@@ -270,3 +294,103 @@ async def _handle_delete_last(
         )
     except Exception:
         await update.message.reply_text("No recent transactions found.")
+
+
+async def _handle_edit_field_reply(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str,
+    telegram_id: int,
+) -> None:
+    field = context.user_data.get("editing_field")
+    saved_tx = context.user_data.get("editing_transaction")   # editing a saved tx via "edit last"
+    pending = context.user_data.get("pending_transaction")     # editing the pending confirmation
+
+    if not field or (not saved_tx and not pending):
+        await update.message.reply_text("No edit in progress.")
+        context.user_data.pop("state", None)
+        return
+
+    # ── Parse the typed value ────────────────────────────────────────────────
+    parsed = {}
+
+    if field == "amount":
+        try:
+            parsed["amount"] = float(text.replace(",", "").replace(" ", ""))
+        except ValueError:
+            await update.message.reply_text("Please enter a valid number (e.g. 500000):")
+            return
+
+    elif field == "currency":
+        val = text.strip().upper()
+        if val not in ("UZS", "USD"):
+            await update.message.reply_text("Please reply with UZS or USD:")
+            return
+        parsed["currency"] = val
+
+    elif field == "type":
+        val = text.strip().lower()
+        if val not in ("income", "expense"):
+            await update.message.reply_text("Please reply with 'income' or 'expense':")
+            return
+        parsed["type"] = val
+
+    elif field == "category":
+        categories = await api_client.get_categories(telegram_id)
+        cat_lower = text.strip().lower()
+        match = None
+        for c in categories:
+            if c["name"].lower() == cat_lower:
+                match = c
+                break
+        if match is None:
+            for c in categories:
+                if cat_lower in c["name"].lower():
+                    match = c
+                    break
+        if match:
+            parsed["category_id"] = match["id"]
+            parsed["category_name"] = match["name"]
+        else:
+            cat_names = ", ".join(c["name"] for c in categories)
+            await update.message.reply_text(
+                f"Category not found. Available: {cat_names}\n\nPlease try again:"
+            )
+            return
+
+    elif field == "date":
+        val = text.strip().lower()
+        if val in ("today", "сегодня", "bugun"):
+            from datetime import date
+            parsed["date"] = date.today().isoformat()
+        else:
+            try:
+                from datetime import datetime
+                datetime.strptime(val, "%Y-%m-%d")
+                parsed["date"] = val
+            except ValueError:
+                await update.message.reply_text("Please enter date as YYYY-MM-DD or 'today':")
+                return
+
+    elif field == "note":
+        parsed["note"] = text.strip() if text.strip().lower() not in ("skip", "none", "-") else ""
+
+    context.user_data.pop("editing_field", None)
+    context.user_data.pop("state", None)
+
+    # ── Apply: pending confirmation edit → update dict and re-show confirmation
+    if pending is not None:
+        pending.update(parsed)
+        context.user_data["pending_transaction"] = pending
+        await _show_confirmation(update, context, pending)
+        return
+
+    # ── Apply: saved transaction edit → call API ─────────────────────────────
+    try:
+        await api_client.update_transaction(telegram_id, saved_tx["id"], parsed)
+        await update.message.reply_text(f"✅ {field.capitalize()} updated successfully!")
+    except Exception as exc:
+        logger.error("Update transaction failed: %s", exc)
+        await update.message.reply_text("❌ Failed to update. Please try again.")
+    finally:
+        context.user_data.pop("editing_transaction", None)
